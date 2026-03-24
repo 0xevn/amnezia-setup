@@ -318,10 +318,10 @@ install_amneziawg_userspace() {
         esac
     fi
 
-    # Install git and make
+    # Install git, make, and build dependencies
     case "$PKG_MANAGER" in
-        apt) apt install -y git make ;;
-        apk) apk add git make ;;
+        apt) apt install -y git make build-essential ;;
+        apk) apk add git make linux-headers ;;
     esac
 
     # Create temp directory
