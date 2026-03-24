@@ -1113,18 +1113,13 @@ start_amneziawg() {
     svc_start "$SVC_NAME"
 
     sleep 2
-    if svc_is_active "$SVC_NAME"; then
+    # Check if interface is up (awg-quick is oneshot, so service status check doesn't work)
+    if ip link show "$VPN_INTERFACE" &>/dev/null; then
         log_info "AmneziaWG is running successfully!"
+        log_info "Interface ${VPN_INTERFACE} is up."
     else
         log_error "AmneziaWG failed to start. Check configuration."
         exit 1
-    fi
-
-    # Verify interface is up
-    if ip link show "$VPN_INTERFACE" &>/dev/null; then
-        log_info "Interface ${VPN_INTERFACE} is up."
-    else
-        log_warn "Interface ${VPN_INTERFACE} not found. Check logs."
     fi
 }
 
