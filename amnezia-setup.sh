@@ -93,10 +93,12 @@ generate_amneziavpn_qr() {
     local jmax="${10}"
     local s1="${11}"
     local s2="${12}"
-    local h1="${13}"
-    local h2="${14}"
-    local h3="${15}"
-    local h4="${16}"
+    local s3="${13}"
+    local s4="${14}"
+    local h1="${15}"
+    local h2="${16}"
+    local h3="${17}"
+    local h4="${18}"
 
     python3 << PYEOF
 import json
@@ -104,75 +106,114 @@ import zlib
 import struct
 import base64
 
-# Build the AmneziaVPN configuration JSON
+# The WireGuard .conf content (with leading newline as in working example)
+# AmneziaWG 2.0 format with S3 and S4 parameters
+wg_config = """
+[Interface]
+PrivateKey = ${client_priv_key}
+Address = ${client_ip}/32
+DNS = ${dns}
+Jc = ${jc}
+Jmin = ${jmin}
+Jmax = ${jmax}
+S1 = ${s1}
+S2 = ${s2}
+S3 = ${s3}
+S4 = ${s4}
+H1 = ${h1}
+H2 = ${h2}
+H3 = ${h3}
+H4 = ${h4}
+
+[Peer]
+PublicKey = ${server_pub_key}
+PresharedKey = ${psk}
+AllowedIPs = 0.0.0.0/0, ::/0
+PersistentKeepalive = 25
+Endpoint = ${server_ip}:${port}
+"""
+
+# Build last_config with ALL required fields
+# This matches the exact format used by AmneziaVPN app (2.0)
+last_config = {
+    "Jc": "${jc}",
+    "Jmin": "${jmin}",
+    "Jmax": "${jmax}",
+    "S1": "${s1}",
+    "S2": "${s2}",
+    "S3": "${s3}",
+    "S4": "${s4}",
+    "H1": "${h1}",
+    "H2": "${h2}",
+    "H3": "${h3}",
+    "H4": "${h4}",
+    "client_ip": "${client_ip}",
+    "client_priv_key": "${client_priv_key}",
+    "client_pub_key": "0",
+    "psk_key": "${psk}",
+    "server_pub_key": "${server_pub_key}",
+    "hostName": "${server_ip}",
+    "port": int("${port}"),
+    "config": wg_config
+}
+
+# Build the main AmneziaVPN configuration JSON
+# Order matters! container comes before awg
 config = {
     "containers": [{
-        "awg": {
-            "H1": "${h1}",
-            "H2": "${h2}",
-            "H3": "${h3}",
-            "H4": "${h4}",
-            "Jc": "${jc}",
-            "Jmax": "${jmax}",
-            "Jmin": "${jmin}",
-            "S1": "${s1}",
-            "S2": "${s2}"
-        },
         "container": "amnezia-awg",
-        "last_config": {
-            "H1": "${h1}",
-            "H2": "${h2}",
-            "H3": "${h3}",
-            "H4": "${h4}",
+        "awg": {
+            "isThirdPartyConfig": True,
+            "transport_proto": "udp",
+            "port": "${port}",
             "Jc": "${jc}",
-            "Jmax": "${jmax}",
             "Jmin": "${jmin}",
+            "Jmax": "${jmax}",
             "S1": "${s1}",
             "S2": "${s2}",
-            "allowed_ips": "0.0.0.0/0, ::/0",
-            "client_ip": "${client_ip}",
-            "client_priv_key": "${client_priv_key}",
-            "config": "",
-            "hostName": "${server_ip}",
-            "mtu": "1280",
-            "persistent_keep_alive": "25",
-            "port": "${port}",
-            "psk_key": "${psk}",
-            "server_pub_key": "${server_pub_key}"
+            "S3": "${s3}",
+            "S4": "${s4}",
+            "H1": "${h1}",
+            "H2": "${h2}",
+            "H3": "${h3}",
+            "H4": "${h4}",
+            "last_config": json.dumps(last_config, separators=(',', ':'))
         }
     }],
     "defaultContainer": "amnezia-awg",
     "description": "AmneziaWG Server",
+    "hostName": "${server_ip}",
     "dns1": "${dns}",
-    "dns2": "",
-    "hostName": "${server_ip}"
+    "dns2": ""
 }
 
-# Convert to JSON string
+# Convert to JSON string (compact, no spaces)
 json_str = json.dumps(config, separators=(',', ':'))
 json_bytes = json_str.encode('utf-8')
 
-# Compress with zlib (raw deflate)
-compressed = zlib.compress(json_bytes, 9)
+# Compress with zlib (default compression)
+compressed = zlib.compress(json_bytes)
 
-# Build binary header (12 bytes):
-# - Magic number: 0x07C00100 (big-endian)
-# - Compressed length + 4 (big-endian)
-# - Uncompressed length (big-endian)
-magic = 0x07C00100
-compressed_len = len(compressed) + 4
-uncompressed_len = len(json_bytes)
+# Build the full QR data structure:
+# - Bytes 0-1: magic (1984 as big-endian signed short)
+# - Byte 2: chunks count (1)
+# - Byte 3: chunk index (0)
+# - Bytes 4-7: qCompress payload size (4 + len(compressed))
+# - Bytes 8-11: uncompressed JSON size (Qt qCompress header)
+# - Bytes 12+: zlib compressed data
 
-header = struct.pack('>III', magic, compressed_len, uncompressed_len)
+qcompress_payload_size = 4 + len(compressed)
+uncompressed_size = len(json_bytes)
 
-# Concatenate header + compressed data
-result = header + compressed
+result = struct.pack('>hBB', 1984, 1, 0)  # magic + chunks + index
+result += struct.pack('>I', qcompress_payload_size)  # payload size
+result += struct.pack('>I', uncompressed_size)  # Qt qCompress header
+result += compressed  # zlib data
 
-# Base64url encode
+# Base64url encode (without padding)
 b64 = base64.urlsafe_b64encode(result).decode('ascii').rstrip('=')
 
-# Output with vpn:// prefix
-print(f"vpn://{b64}")
+print(b64)
 PYEOF
 }
 log_warn()    { echo -e "${YELLOW}[WARN]${NC}    $1"; }
@@ -767,7 +808,7 @@ generate_obfuscation_params() {
     log_step "7" "Generating obfuscation parameters"
 
     echo ""
-    echo -e "  AmneziaWG uses protocol obfuscation to evade DPI detection."
+    echo -e "  AmneziaWG 2.0 uses protocol obfuscation to evade DPI detection."
     echo -e "  Generating unique parameters for this installation..."
     echo ""
 
@@ -775,19 +816,37 @@ generate_obfuscation_params() {
     AWG_JC=4        # Junk packet count
     AWG_JMIN=40     # Min junk size (bytes)
     AWG_JMAX=70     # Max junk size (bytes)
-    AWG_S1=30       # Init packet padding
-    AWG_S2=40       # Response packet padding
 
-    # Generate random 32-bit magic headers (unique per installation)
-    AWG_H1=$(od -An -N4 -tu4 /dev/urandom | tr -d ' ')
-    AWG_H2=$(od -An -N4 -tu4 /dev/urandom | tr -d ' ')
-    AWG_H3=$(od -An -N4 -tu4 /dev/urandom | tr -d ' ')
-    AWG_H4=$(od -An -N4 -tu4 /dev/urandom | tr -d ' ')
+    # Padding parameters (AmneziaWG 2.0)
+    # Constraint: S1 + 56 must NOT equal S2 (to avoid pattern detection)
+    AWG_S1=20       # Init packet padding (0-32)
+    AWG_S2=30       # Response packet padding (0-32)
+    AWG_S3=25       # Cookie message padding (0-32) - NEW in 2.0
+    AWG_S4=20       # Transport data padding (0-64) - NEW in 2.0, most important!
 
-    log_info "Obfuscation parameters generated:"
+    # Generate random non-overlapping ranges for H1-H4 (AmneziaWG 2.0)
+    # Each H parameter gets a range like "min-max" for dynamic header obfuscation
+    # We divide the space (1000 to 2000000000) into 4 non-overlapping segments
+
+    # Generate 8 random boundary points and sort them to create 4 non-overlapping ranges
+    local -a boundaries
+    for i in {0..7}; do
+        boundaries+=("$(shuf -i 1000-2000000000 -n 1)")
+    done
+
+    # Sort the boundaries
+    IFS=$'\n' sorted=($(sort -n <<<"${boundaries[*]}")); unset IFS
+
+    # Create ranges from sorted pairs (ensuring min < max with gap)
+    AWG_H1="${sorted[0]}-${sorted[1]}"
+    AWG_H2="${sorted[2]}-${sorted[3]}"
+    AWG_H3="${sorted[4]}-${sorted[5]}"
+    AWG_H4="${sorted[6]}-${sorted[7]}"
+
+    log_info "AmneziaWG 2.0 obfuscation parameters generated:"
     echo -e "    Jc=${AWG_JC} (junk packets), Jmin=${AWG_JMIN}, Jmax=${AWG_JMAX}"
-    echo -e "    S1=${AWG_S1} (init padding), S2=${AWG_S2} (response padding)"
-    echo -e "    H1-H4: unique magic headers"
+    echo -e "    S1=${AWG_S1}, S2=${AWG_S2}, S3=${AWG_S3}, S4=${AWG_S4} (padding)"
+    echo -e "    H1-H4: random non-overlapping ranges"
 }
 
 # ────────────────────────────────────────────────────────────
@@ -818,6 +877,8 @@ Jmin = ${AWG_JMIN}
 Jmax = ${AWG_JMAX}
 S1 = ${AWG_S1}
 S2 = ${AWG_S2}
+S3 = ${AWG_S3}
+S4 = ${AWG_S4}
 H1 = ${AWG_H1}
 H2 = ${AWG_H2}
 H3 = ${AWG_H3}
@@ -839,6 +900,7 @@ AWG_SERVER_EOF
 
     # Generate client config (for display later)
     CLIENT_CONFIG="[Interface]
+# Client Private Key (keep secret!)
 PrivateKey = ${CLIENT_PRIVATE_KEY}
 Address = ${VPN_SUBNET}.2/24
 DNS = ${DNS_IP}
@@ -847,12 +909,15 @@ Jmin = ${AWG_JMIN}
 Jmax = ${AWG_JMAX}
 S1 = ${AWG_S1}
 S2 = ${AWG_S2}
+S3 = ${AWG_S3}
+S4 = ${AWG_S4}
 H1 = ${AWG_H1}
 H2 = ${AWG_H2}
 H3 = ${AWG_H3}
 H4 = ${AWG_H4}
 
 [Peer]
+# Server Public Key (this is the SERVER's key, not client's)
 PublicKey = ${SERVER_PUBLIC_KEY}
 PresharedKey = ${PRESHARED_KEY}
 Endpoint = ${SERVER_IP}:${AWG_PORT}
@@ -1296,8 +1361,9 @@ print_summary() {
         echo -e "${CYAN}║${NC}  Client Address: ${GREEN}${VPN_SUBNET}.2${NC}"
         echo -e "${CYAN}║${NC}  DNS:            ${GREEN}${DNS_NAME} (${DNS_IP})${NC}"
         echo -e "${CYAN}║${NC}                                                          ${CYAN}║${NC}"
-        echo -e "${CYAN}║${NC}  ${BOLD}Obfuscation Parameters:${NC}                                ${CYAN}║${NC}"
-        echo -e "${CYAN}║${NC}  Jc=${AWG_JC} Jmin=${AWG_JMIN} Jmax=${AWG_JMAX} S1=${AWG_S1} S2=${AWG_S2}"
+        echo -e "${CYAN}║${NC}  ${BOLD}Obfuscation Parameters (AWG 2.0):${NC}                      ${CYAN}║${NC}"
+        echo -e "${CYAN}║${NC}  Jc=${AWG_JC} Jmin=${AWG_JMIN} Jmax=${AWG_JMAX}"
+        echo -e "${CYAN}║${NC}  S1=${AWG_S1} S2=${AWG_S2} S3=${AWG_S3} S4=${AWG_S4}"
         echo -e "${CYAN}║${NC}                                                          ${CYAN}║${NC}"
         echo -e "${CYAN}╚══════════════════════════════════════════════════════════╝${NC}"
         echo ""
@@ -1364,11 +1430,16 @@ print_summary() {
             "$AWG_JMAX" \
             "$AWG_S1" \
             "$AWG_S2" \
+            "$AWG_S3" \
+            "$AWG_S4" \
             "$AWG_H1" \
             "$AWG_H2" \
             "$AWG_H3" \
             "$AWG_H4")
         qrencode -t ANSIUTF8 "$AMNEZIA_QR"
+        echo ""
+        echo -e "  ${BOLD}Or paste this URL in AmneziaVPN app:${NC}"
+        echo -e "  ${CYAN}vpn://${AMNEZIA_QR}${NC}"
         echo ""
     else
         log_info "QR code hidden. You can generate it later with the save file."
@@ -1446,12 +1517,14 @@ Client Private Key: ${CLIENT_PRIVATE_KEY}
 Client Public Key:  ${CLIENT_PUBLIC_KEY}
 Preshared Key:      ${PRESHARED_KEY}
 
-=== OBFUSCATION PARAMETERS ===
+=== OBFUSCATION PARAMETERS (AmneziaWG 2.0) ===
 Jc   = ${AWG_JC}
 Jmin = ${AWG_JMIN}
 Jmax = ${AWG_JMAX}
 S1   = ${AWG_S1}
 S2   = ${AWG_S2}
+S3   = ${AWG_S3}
+S4   = ${AWG_S4}
 H1   = ${AWG_H1}
 H2   = ${AWG_H2}
 H3   = ${AWG_H3}
@@ -1461,6 +1534,11 @@ H4   = ${AWG_H4}
 (Copy this to AmneziaVPN app or save as .conf file)
 
 ${CLIENT_CONFIG}
+
+=== AMNEZIAVPN APP URL ===
+(Paste this URL in AmneziaVPN app to import configuration)
+
+vpn://$(generate_amneziavpn_qr "$SERVER_IP" "$AWG_PORT" "$SERVER_PUBLIC_KEY" "$CLIENT_PRIVATE_KEY" "${VPN_SUBNET}.2" "$PRESHARED_KEY" "$DNS_IP" "$AWG_JC" "$AWG_JMIN" "$AWG_JMAX" "$AWG_S1" "$AWG_S2" "$AWG_S3" "$AWG_S4" "$AWG_H1" "$AWG_H2" "$AWG_H3" "$AWG_H4")
 
 === MANAGEMENT ===
 Config file:  ${AWG_CONFIG}

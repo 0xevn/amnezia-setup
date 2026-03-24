@@ -23,9 +23,14 @@ AmneziaWG automated installer for VPS servers. Single-file bash script (~1390 li
 
 AmneziaWG is a modified WireGuard protocol with DPI-evasion features:
 - Same cryptographic security as WireGuard (x25519 + ChaCha20-Poly1305)
-- Random headers (H1-H4) to disguise packet signatures
-- Packet padding (S1-S2) to obscure handshake patterns
+- Random header ranges (H1-H4) to disguise packet signatures (2.0: ranges instead of fixed values)
+- Packet padding (S1-S4) to obscure handshake and transport patterns (S3-S4 new in 2.0)
 - Junk packets (Jc, Jmin, Jmax) to add noise
+
+**AmneziaWG 2.0 additions:**
+- `S3`: Cookie message padding (0-32 bytes)
+- `S4`: Transport data padding (0-64 bytes) — most important, affects every packet
+- `H1-H4`: Now specified as ranges (e.g., `H1 = 100000-200000`) for per-packet randomization
 
 ## Script Architecture
 
@@ -45,7 +50,7 @@ Key globals set during execution (defined at top of file):
 - `SSH_PORT`, `AWG_PORT`
 - `SERVER_PRIVATE_KEY`, `SERVER_PUBLIC_KEY`
 - `CLIENT_PRIVATE_KEY`, `CLIENT_PUBLIC_KEY`, `PRESHARED_KEY`
-- `AWG_JC`, `AWG_JMIN`, `AWG_JMAX`, `AWG_S1`, `AWG_S2`, `AWG_H1-H4`
+- `AWG_JC`, `AWG_JMIN`, `AWG_JMAX`, `AWG_S1`, `AWG_S2`, `AWG_S3`, `AWG_S4`, `AWG_H1-H4`
 - `DNS_NAME`, `DNS_IP`
 - `SERVER_IP`, `CLIENT_CONFIG`
 
@@ -73,7 +78,7 @@ main()
 ├── choose_dns()                      # 6 DNS providers (for client config)
 ├── choose_logging()                  # Debug logging preference
 ├── generate_credentials()            # Server/client keypairs + PSK
-├── generate_obfuscation_params()     # Random H1-H4, fixed Jc/S1/S2
+├── generate_obfuscation_params()     # Random H1-H4 ranges, fixed Jc/S1-S4
 ├── write_server_config()             # Generates /etc/amnezia/amneziawg/awg0.conf
 ├── enable_ip_forwarding()            # sysctl net.ipv4.ip_forward
 ├── configure_firewall()              # iptables + NAT + persistence
@@ -123,7 +128,7 @@ Frame colors by section:
 
 ### AmneziaWG Config Format
 
-Uses WireGuard INI format with additional obfuscation parameters:
+Uses WireGuard INI format with additional obfuscation parameters (AmneziaWG 2.0):
 
 ```ini
 [Interface]
@@ -133,18 +138,25 @@ ListenPort = 51820
 Jc = 4
 Jmin = 40
 Jmax = 70
-S1 = 30
-S2 = 40
-H1 = <random_32bit>
-H2 = <random_32bit>
-H3 = <random_32bit>
-H4 = <random_32bit>
+S1 = 20
+S2 = 30
+S3 = 25
+S4 = 20
+H1 = <min>-<max>
+H2 = <min>-<max>
+H3 = <min>-<max>
+H4 = <min>-<max>
 
 [Peer]
 PublicKey = <client_public_key>
 PresharedKey = <psk>
 AllowedIPs = 10.10.8.2/32
 ```
+
+**2.0 changes:**
+- `S3`, `S4`: New padding parameters
+- `H1-H4`: Now use range format (e.g., `H1 = 100000-500000`) for per-packet randomization
+- Constraint: `S1 + 56 ≠ S2` (prevents pattern detection)
 
 ### Installation Strategy
 

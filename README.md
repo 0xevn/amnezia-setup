@@ -1,6 +1,6 @@
 # AmneziaWG Setup
 
-Automated installer for **AmneziaWG** — a DPI-resistant WireGuard VPN with protocol obfuscation.
+Automated installer for **AmneziaWG 2.0** — a DPI-resistant WireGuard VPN with protocol obfuscation.
 
 One script. One command. Full VPN server with obfuscation.
 
@@ -13,11 +13,13 @@ Standard WireGuard is fast and secure, but has a recognizable packet signature t
 | Feature | Description |
 |---------|-------------|
 | **Same security** | x25519 + ChaCha20-Poly1305 (identical to WireGuard) |
-| **Magic headers** (H1-H4) | Random 32-bit values that disguise packet signatures |
-| **Packet padding** (S1-S2) | Obscures handshake patterns |
+| **Magic headers** (H1-H4) | Random ranges that disguise packet signatures (2.0) |
+| **Packet padding** (S1-S4) | Obscures handshake and transport patterns (S3-S4 new in 2.0) |
 | **Junk packets** (Jc, Jmin, Jmax) | Adds noise to traffic flow |
 
 The result: your VPN traffic looks like random noise, defeating DPI systems.
+
+> **Note:** This script implements AmneziaWG 2.0 protocol. Requires AmneziaVPN app version **4.8.12.9 or later**.
 
 ---
 
@@ -64,7 +66,7 @@ Then the setup proceeds:
 5. Choose a DNS provider for client config
 6. Choose logging preference (disabled by default)
 7. Generate server and client keypairs + preshared key
-8. Generate unique obfuscation parameters (H1-H4 random, Jc/S1/S2 fixed)
+8. Generate unique obfuscation parameters (H1-H4 random ranges, S1-S4/Jc fixed)
 9. Write server config to `/etc/amnezia/amneziawg/awg0.conf`
 10. Enable IP forwarding
 11. Configure iptables firewall with NAT (backs up existing rules)
@@ -140,11 +142,18 @@ These parameters are generated during setup and must match between server and al
 | `Jc` | Junk packet count | 4 |
 | `Jmin` | Minimum junk size (bytes) | 40 |
 | `Jmax` | Maximum junk size (bytes) | 70 |
-| `S1` | Init packet padding | 30 |
-| `S2` | Response packet padding | 40 |
-| `H1-H4` | Magic headers (32-bit) | **Random per install** |
+| `S1` | Init packet padding (0-32) | 20 |
+| `S2` | Response packet padding (0-32) | 30 |
+| `S3` | Cookie message padding (0-32) | 25 *(new in 2.0)* |
+| `S4` | Transport data padding (0-64) | 20 *(new in 2.0, most important!)* |
+| `H1-H4` | Magic header ranges | **Random non-overlapping ranges** |
 
-The H1-H4 values are unique to your installation. Keep them secret — they're part of what makes your traffic undetectable.
+**AmneziaWG 2.0 improvements:**
+- **S3/S4**: S4 adds padding to every data packet, making traffic analysis much harder
+- **H1-H4 ranges**: Each packet uses a random header value within the range (e.g., `H1 = 100000-200000`)
+- **Constraint**: S1 + 56 must not equal S2 (prevents pattern detection)
+
+The H1-H4 ranges are unique to your installation. Keep them secret — they're part of what makes your traffic undetectable.
 
 ---
 
@@ -179,8 +188,10 @@ The H1-H4 values are unique to your installation. Keep them secret — they're p
    Jc = 4
    Jmin = 40
    Jmax = 70
-   S1 = 30
-   S2 = 40
+   S1 = 20
+   S2 = 30
+   S3 = 25
+   S4 = 20
    H1 = <same as server>
    H2 = <same as server>
    H3 = <same as server>
@@ -233,7 +244,7 @@ The H1-H4 values are unique to your installation. Keep them secret — they're p
 | Kernel module not loading | Script auto-falls back to userspace mode. Check with `lsmod \| grep amneziawg` |
 | No internet after connecting | Check IP forwarding: `cat /proc/sys/net/ipv4/ip_forward` should be `1` |
 | NAT not working | Check NAT rules: `iptables -t nat -L POSTROUTING -n` |
-| Client can't connect | Verify obfuscation params match exactly (especially H1-H4) |
+| Client can't connect | Verify obfuscation params match exactly (S1-S4, H1-H4) |
 | Locked out of SSH | Connect via VPS console, check port in config |
 | QR code not displayed | Install `qrencode`: `apt install qrencode` or `apk add libqrencode-tools` |
 
