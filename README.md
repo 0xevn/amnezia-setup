@@ -135,23 +135,26 @@ Default: DNS.SB (Germany, no logging).
 
 ## Obfuscation Parameters
 
-These parameters are generated during setup and must match between server and all clients:
+These parameters are generated during setup and must match between server and all clients.
 
-| Parameter | Description | Default |
-|-----------|-------------|---------|
-| `Jc` | Junk packet count | 4 |
-| `Jmin` | Minimum junk size (bytes) | 40 |
-| `Jmax` | Maximum junk size (bytes) | 70 |
-| `S1` | Init packet padding (0-32) | 20 |
-| `S2` | Response packet padding (0-32) | 30 |
-| `S3` | Cookie message padding (0-32) | 25 *(new in 2.0)* |
-| `S4` | Transport data padding (0-64) | 20 *(new in 2.0, most important!)* |
-| `H1-H4` | Magic header ranges | **Random non-overlapping ranges** |
+During setup, you can choose between **optimized defaults** (recommended) or **random parameters**:
+
+| Parameter | Description | Optimized Default |
+|-----------|-------------|-------------------|
+| `Jc` | Junk packet count | 8 |
+| `Jmin` | Minimum junk size (bytes) | 50 |
+| `Jmax` | Maximum junk size (bytes) | 1000 |
+| `S1` | Init packet padding | 60 |
+| `S2` | Response packet padding | 85 |
+| `S3` | Cookie message padding | 45 *(new in 2.0)* |
+| `S4` | Transport data padding | 50 *(new in 2.0, most important!)* |
+| `H1-H4` | Magic header ranges | **Always random** |
 
 **AmneziaWG 2.0 improvements:**
 - **S3/S4**: S4 adds padding to every data packet, making traffic analysis much harder
 - **H1-H4 ranges**: Each packet uses a random header value within the range (e.g., `H1 = 100000-200000`)
 - **Constraint**: S1 + 56 must not equal S2 (prevents pattern detection)
+- **Optimized defaults**: Tuned for aggressive DPI bypass with larger junk packets (Jmax=1000)
 
 The H1-H4 ranges are unique to your installation. Keep them secret — they're part of what makes your traffic undetectable.
 
@@ -185,13 +188,13 @@ The H1-H4 ranges are unique to your installation. Keep them secret — they're p
    PrivateKey = <contents of client2_private.key>
    Address = 10.10.8.3/24
    DNS = 45.11.45.11
-   Jc = 4
-   Jmin = 40
-   Jmax = 70
-   S1 = 20
-   S2 = 30
-   S3 = 25
-   S4 = 20
+   Jc = 8
+   Jmin = 50
+   Jmax = 1000
+   S1 = 60
+   S2 = 85
+   S3 = 45
+   S4 = 50
    H1 = <same as server>
    H2 = <same as server>
    H3 = <same as server>

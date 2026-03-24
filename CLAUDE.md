@@ -78,7 +78,7 @@ main()
 ├── choose_dns()                      # 6 DNS providers (for client config)
 ├── choose_logging()                  # Debug logging preference
 ├── generate_credentials()            # Server/client keypairs + PSK
-├── generate_obfuscation_params()     # Random H1-H4 ranges, fixed Jc/S1-S4
+├── generate_obfuscation_params()     # User choice: optimized defaults or random params
 ├── write_server_config()             # Generates /etc/amnezia/amneziawg/awg0.conf
 ├── enable_ip_forwarding()            # sysctl net.ipv4.ip_forward
 ├── configure_firewall()              # iptables + NAT + persistence
@@ -124,6 +124,7 @@ Frame colors by section:
 - **Security Check** (🔒): yellow
 - **Overwrite Warning** (⚠): red
 - **Logging Preference** (📋): cyan
+- **Obfuscation Parameters** (🔧): cyan
 - **Server Credentials**: cyan
 
 ### AmneziaWG Config Format
@@ -135,13 +136,13 @@ Uses WireGuard INI format with additional obfuscation parameters (AmneziaWG 2.0)
 PrivateKey = <server_private_key>
 Address = 10.10.8.1/24
 ListenPort = 51820
-Jc = 4
-Jmin = 40
-Jmax = 70
-S1 = 20
-S2 = 30
-S3 = 25
-S4 = 20
+Jc = 8
+Jmin = 50
+Jmax = 1000
+S1 = 60
+S2 = 85
+S3 = 45
+S4 = 50
 H1 = <min>-<max>
 H2 = <min>-<max>
 H3 = <min>-<max>
@@ -153,9 +154,10 @@ PresharedKey = <psk>
 AllowedIPs = 10.10.8.2/32
 ```
 
-**2.0 changes:**
-- `S3`, `S4`: New padding parameters
-- `H1-H4`: Now use range format (e.g., `H1 = 100000-500000`) for per-packet randomization
+**Obfuscation parameter options:**
+- **Optimized defaults** (recommended): Jc=8, Jmin=50, Jmax=1000, S1=60, S2=85, S3=45, S4=50
+- **Random**: User can choose to generate random Jc/Jmin/Jmax/S1-S4 values
+- **H1-H4**: Always randomly generated as ranges (e.g., `H1 = 100000-500000`)
 - Constraint: `S1 + 56 ≠ S2` (prevents pattern detection)
 
 ### Installation Strategy

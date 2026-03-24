@@ -808,25 +808,61 @@ generate_obfuscation_params() {
     log_step "7" "Generating obfuscation parameters"
 
     echo ""
-    echo -e "  AmneziaWG 2.0 uses protocol obfuscation to evade DPI detection."
-    echo -e "  Generating unique parameters for this installation..."
+    echo -e "${CYAN}╔══════════════════════════════════════════════════════════╗${NC}"
+    echo -e "${CYAN}║${NC}  ${BOLD}🔧 Obfuscation Parameters${NC}                              ${CYAN}║${NC}"
+    echo -e "${CYAN}╠══════════════════════════════════════════════════════════╣${NC}"
+    echo -e "${CYAN}║${NC}                                                          ${CYAN}║${NC}"
+    echo -e "${CYAN}║${NC}  AmneziaWG 2.0 uses obfuscation to evade DPI detection. ${CYAN}║${NC}"
+    echo -e "${CYAN}║${NC}                                                          ${CYAN}║${NC}"
+    echo -e "${CYAN}║${NC}  ${BOLD}Optimized defaults${NC} (recommended for most DPI systems): ${CYAN}║${NC}"
+    echo -e "${CYAN}║${NC}    Jc=8, Jmin=50, Jmax=1000                              ${CYAN}║${NC}"
+    echo -e "${CYAN}║${NC}    S1=60, S2=85, S3=45, S4=50                            ${CYAN}║${NC}"
+    echo -e "${CYAN}║${NC}                                                          ${CYAN}║${NC}"
+    echo -e "${CYAN}║${NC}  ${BOLD}Random parameters${NC} generate unique values each time.    ${CYAN}║${NC}"
+    echo -e "${CYAN}║${NC}                                                          ${CYAN}║${NC}"
+    echo -e "${CYAN}║${NC}  Note: H1-H4 header ranges are always randomly generated ${CYAN}║${NC}"
+    echo -e "${CYAN}║${NC}  to ensure unique traffic signatures.                    ${CYAN}║${NC}"
+    echo -e "${CYAN}║${NC}                                                          ${CYAN}║${NC}"
+    echo -e "${CYAN}╚══════════════════════════════════════════════════════════╝${NC}"
     echo ""
+    read -rp "  Use optimized defaults? [Y/n]: " PARAM_INPUT
 
-    # Fixed parameters (reasonable defaults)
-    AWG_JC=4        # Junk packet count
-    AWG_JMIN=40     # Min junk size (bytes)
-    AWG_JMAX=70     # Max junk size (bytes)
+    if [[ "${PARAM_INPUT,,}" == "n" || "${PARAM_INPUT,,}" == "no" ]]; then
+        # Generate random parameters
+        log_info "Generating random obfuscation parameters..."
 
-    # Padding parameters (AmneziaWG 2.0)
-    # Constraint: S1 + 56 must NOT equal S2 (to avoid pattern detection)
-    AWG_S1=20       # Init packet padding (0-32)
-    AWG_S2=30       # Response packet padding (0-32)
-    AWG_S3=25       # Cookie message padding (0-32) - NEW in 2.0
-    AWG_S4=20       # Transport data padding (0-64) - NEW in 2.0, most important!
+        # Random Jc (3-10), Jmin (30-80), Jmax (500-1500)
+        AWG_JC=$(( (RANDOM % 8) + 3 ))
+        AWG_JMIN=$(( (RANDOM % 51) + 30 ))
+        AWG_JMAX=$(( (RANDOM % 1001) + 500 ))
+
+        # Random padding (ensuring S1 + 56 != S2)
+        AWG_S1=$(( (RANDOM % 33) ))           # 0-32
+        AWG_S2=$(( (RANDOM % 33) ))           # 0-32
+        # Ensure constraint: S1 + 56 != S2
+        while [[ $(( AWG_S1 + 56 )) -eq $AWG_S2 ]]; do
+            AWG_S2=$(( (RANDOM % 33) ))
+        done
+        AWG_S3=$(( (RANDOM % 33) ))           # 0-32
+        AWG_S4=$(( (RANDOM % 65) ))           # 0-64
+    else
+        # Optimized defaults (tuned for aggressive DPI bypass)
+        AWG_JC=8        # Junk packet count
+        AWG_JMIN=50     # Min junk size (bytes)
+        AWG_JMAX=1000   # Max junk size (bytes)
+
+        # Padding parameters (AmneziaWG 2.0)
+        AWG_S1=60       # Init packet padding (0-32 typically, but higher works)
+        AWG_S2=85       # Response packet padding
+        AWG_S3=45       # Cookie message padding - NEW in 2.0
+        AWG_S4=50       # Transport data padding - NEW in 2.0, most important!
+
+        log_info "Using optimized default parameters."
+    fi
 
     # Generate random non-overlapping ranges for H1-H4 (AmneziaWG 2.0)
     # Each H parameter gets a range like "min-max" for dynamic header obfuscation
-    # We divide the space into 4 non-overlapping segments
+    # These are ALWAYS random to ensure unique traffic signatures
 
     # Generate 8 random boundary points using /dev/urandom (memory-efficient)
     local -a boundaries
@@ -846,10 +882,10 @@ generate_obfuscation_params() {
     AWG_H3="${sorted[4]}-${sorted[5]}"
     AWG_H4="${sorted[6]}-${sorted[7]}"
 
-    log_info "AmneziaWG 2.0 obfuscation parameters generated:"
+    log_info "AmneziaWG 2.0 obfuscation parameters:"
     echo -e "    Jc=${AWG_JC} (junk packets), Jmin=${AWG_JMIN}, Jmax=${AWG_JMAX}"
     echo -e "    S1=${AWG_S1}, S2=${AWG_S2}, S3=${AWG_S3}, S4=${AWG_S4} (padding)"
-    echo -e "    H1-H4: random non-overlapping ranges"
+    echo -e "    H1-H4: random non-overlapping ranges (unique to this install)"
 }
 
 # ────────────────────────────────────────────────────────────
