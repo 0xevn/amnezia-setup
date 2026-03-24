@@ -251,6 +251,20 @@ prepare_system() {
             fi
             apk update && apk upgrade
             apk add curl wget openssl iptables ip6tables libqrencode-tools bash
+
+            # Test if iptables works (nft backend may fail in containers)
+            if ! iptables -L -n &>/dev/null; then
+                log_warn "iptables-nft not working, installing iptables-legacy..."
+                apk add iptables-legacy ip6tables-legacy
+                # Create symlinks to use legacy iptables
+                ln -sf /sbin/iptables-legacy /sbin/iptables
+                ln -sf /sbin/iptables-legacy-save /sbin/iptables-save
+                ln -sf /sbin/iptables-legacy-restore /sbin/iptables-restore
+                ln -sf /sbin/ip6tables-legacy /sbin/ip6tables
+                ln -sf /sbin/ip6tables-legacy-save /sbin/ip6tables-save
+                ln -sf /sbin/ip6tables-legacy-restore /sbin/ip6tables-restore
+                log_info "Switched to iptables-legacy."
+            fi
             ;;
     esac
 
