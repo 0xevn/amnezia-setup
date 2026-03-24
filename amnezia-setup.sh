@@ -1026,7 +1026,7 @@ After=network.target
 [Service]
 Type=simple
 ExecStart=/usr/local/bin/amneziawg-go ${VPN_INTERFACE}
-ExecStartPost=/bin/sh -c 'sleep 1 && awg setconf ${VPN_INTERFACE} ${AWG_CONFIG} && ip address add ${VPN_SUBNET}.1/24 dev ${VPN_INTERFACE} && ip link set ${VPN_INTERFACE} up'
+ExecStartPost=/bin/sh -c 'sleep 1 && grep -v -E "^(Address|DNS|PostUp|PostDown|MTU|Table|SaveConfig)\\s*=" ${AWG_CONFIG} | awg setconf ${VPN_INTERFACE} /dev/stdin && ip address add ${VPN_SUBNET}.1/24 dev ${VPN_INTERFACE} && ip link set ${VPN_INTERFACE} up'
 ExecStop=/bin/sh -c 'ip link del ${VPN_INTERFACE}'
 Restart=on-failure
 RestartSec=5
@@ -1084,7 +1084,8 @@ depend() {
 start_post() {
     local PATH="/usr/local/bin:/usr/sbin:/sbin:/usr/bin:/bin:\${PATH}"
     sleep 1
-    awg setconf ${VPN_INTERFACE} ${AWG_CONFIG}
+    # Strip interface settings (Address, DNS, PostUp, PostDown) - awg setconf only accepts protocol settings
+    grep -v -E '^(Address|DNS|PostUp|PostDown|MTU|Table|SaveConfig)\s*=' ${AWG_CONFIG} | awg setconf ${VPN_INTERFACE} /dev/stdin
     ip address add ${VPN_SUBNET}.1/24 dev ${VPN_INTERFACE}
     ip link set ${VPN_INTERFACE} up
 }
