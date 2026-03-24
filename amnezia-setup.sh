@@ -1030,30 +1030,19 @@ create_systemd_service() {
         log_info "Using awg-quick@awg0 service (kernel mode)."
         # Service file is provided by amneziawg package
     else
-        # Create custom service for userspace mode
-        log_info "Creating custom systemd service (userspace mode)."
-
-        local LOG_OUTPUT
-        if [[ "$ENABLE_LOGS" == "y" ]]; then
-            LOG_OUTPUT="append:${AWG_LOG_DIR}/amneziawg.log"
-        else
-            LOG_OUTPUT="null"
-        fi
+        # Create custom service using awg-quick (handles both kernel and userspace)
+        log_info "Creating custom systemd service."
 
         cat > /etc/systemd/system/amneziawg.service <<SVCEOF
 [Unit]
-Description=AmneziaWG userspace tunnel
+Description=AmneziaWG VPN tunnel
 After=network.target
 
 [Service]
-Type=simple
-ExecStart=/usr/local/bin/amneziawg-go ${VPN_INTERFACE}
-ExecStartPost=/bin/sh -c 'sleep 1 && grep -v -E "^(Address|DNS|PostUp|PostDown|MTU|Table|SaveConfig)\\s*=" ${AWG_CONFIG} | awg setconf ${VPN_INTERFACE} /dev/stdin && ip address add ${VPN_SUBNET}.1/24 dev ${VPN_INTERFACE} && ip link set ${VPN_INTERFACE} up'
-ExecStop=/bin/sh -c 'ip link del ${VPN_INTERFACE}'
-Restart=on-failure
-RestartSec=5
-StandardOutput=${LOG_OUTPUT}
-StandardError=${LOG_OUTPUT}
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/bin/awg-quick up ${AWG_CONFIG}
+ExecStop=/usr/local/bin/awg-quick down ${AWG_CONFIG}
 
 [Install]
 WantedBy=multi-user.target
@@ -1064,7 +1053,7 @@ SVCEOF
 }
 
 create_openrc_service() {
-    log_info "Creating OpenRC service (userspace mode)."
+    log_info "Creating OpenRC service."
 
     # Detect openrc-run path
     local OPENRC_RUN
@@ -1076,45 +1065,31 @@ create_openrc_service() {
         OPENRC_RUN="/sbin/openrc-run"
     fi
 
-    local LOG_OUTPUT LOG_ERROR
-    if [[ "$ENABLE_LOGS" == "y" ]]; then
-        LOG_OUTPUT="${AWG_LOG_DIR}/amneziawg.log"
-        LOG_ERROR="${AWG_LOG_DIR}/amneziawg.log"
-    else
-        LOG_OUTPUT="/dev/null"
-        LOG_ERROR="/dev/null"
-    fi
-
+    # Use awg-quick which handles both kernel and userspace modes automatically
     cat > /etc/init.d/amneziawg <<INITEOF
 #!${OPENRC_RUN}
 # OpenRC init script for AmneziaWG
 
 name="amneziawg"
 description="AmneziaWG VPN tunnel"
-command="/usr/local/bin/amneziawg-go"
-command_args="${VPN_INTERFACE}"
-command_background=true
-pidfile="/run/amneziawg.pid"
-output_log="${LOG_OUTPUT}"
-error_log="${LOG_ERROR}"
 
 depend() {
     need net
     after firewall iptables-awg
 }
 
-start_post() {
+start() {
     local PATH="/usr/local/bin:/usr/sbin:/sbin:/usr/bin:/bin:\${PATH}"
-    sleep 1
-    # Strip interface settings (Address, DNS, PostUp, PostDown) - awg setconf only accepts protocol settings
-    grep -v -E '^(Address|DNS|PostUp|PostDown|MTU|Table|SaveConfig)\s*=' ${AWG_CONFIG} | awg setconf ${VPN_INTERFACE} /dev/stdin
-    ip address add ${VPN_SUBNET}.1/24 dev ${VPN_INTERFACE}
-    ip link set ${VPN_INTERFACE} up
+    ebegin "Starting AmneziaWG"
+    awg-quick up ${AWG_CONFIG}
+    eend \$?
 }
 
-stop_pre() {
-    local PATH="/usr/sbin:/sbin:/usr/bin:/bin:\${PATH}"
-    ip link del ${VPN_INTERFACE} 2>/dev/null || true
+stop() {
+    local PATH="/usr/local/bin:/usr/sbin:/sbin:/usr/bin:/bin:\${PATH}"
+    ebegin "Stopping AmneziaWG"
+    awg-quick down ${AWG_CONFIG}
+    eend \$?
 }
 INITEOF
 
