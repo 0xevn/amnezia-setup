@@ -826,16 +826,19 @@ generate_obfuscation_params() {
 
     # Generate random non-overlapping ranges for H1-H4 (AmneziaWG 2.0)
     # Each H parameter gets a range like "min-max" for dynamic header obfuscation
-    # We divide the space (1000 to 2000000000) into 4 non-overlapping segments
+    # We divide the space into 4 non-overlapping segments
 
-    # Generate 8 random boundary points and sort them to create 4 non-overlapping ranges
+    # Generate 8 random boundary points using /dev/urandom (memory-efficient)
     local -a boundaries
     for i in {0..7}; do
-        boundaries+=("$(shuf -i 1000-2000000000 -n 1)")
+        # Generate random 31-bit number (positive, avoid overflow)
+        local rnd=$(od -An -N4 -tu4 /dev/urandom | tr -d ' ')
+        # Scale to range 1000-2000000000
+        boundaries+=("$(( (rnd % 1999999000) + 1000 ))")
     done
 
     # Sort the boundaries
-    IFS=$'\n' sorted=($(sort -n <<<"${boundaries[*]}")); unset IFS
+    IFS=$'\n' sorted=($(printf '%s\n' "${boundaries[@]}" | sort -n)); unset IFS
 
     # Create ranges from sorted pairs (ensuring min < max with gap)
     AWG_H1="${sorted[0]}-${sorted[1]}"
