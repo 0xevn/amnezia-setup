@@ -77,6 +77,104 @@ print_header() {
 }
 
 log_info()    { echo -e "${GREEN}[INFO]${NC}    $1"; }
+
+# Generate AmneziaVPN-compatible QR code data
+# Uses Python for zlib compression and binary format
+generate_amneziavpn_qr() {
+    local server_ip="$1"
+    local port="$2"
+    local server_pub_key="$3"
+    local client_priv_key="$4"
+    local client_ip="$5"
+    local psk="$6"
+    local dns="$7"
+    local jc="$8"
+    local jmin="$9"
+    local jmax="${10}"
+    local s1="${11}"
+    local s2="${12}"
+    local h1="${13}"
+    local h2="${14}"
+    local h3="${15}"
+    local h4="${16}"
+
+    python3 << PYEOF
+import json
+import zlib
+import struct
+import base64
+
+# Build the AmneziaVPN configuration JSON
+config = {
+    "containers": [{
+        "awg": {
+            "H1": "${h1}",
+            "H2": "${h2}",
+            "H3": "${h3}",
+            "H4": "${h4}",
+            "Jc": "${jc}",
+            "Jmax": "${jmax}",
+            "Jmin": "${jmin}",
+            "S1": "${s1}",
+            "S2": "${s2}"
+        },
+        "container": "amnezia-awg",
+        "last_config": {
+            "H1": "${h1}",
+            "H2": "${h2}",
+            "H3": "${h3}",
+            "H4": "${h4}",
+            "Jc": "${jc}",
+            "Jmax": "${jmax}",
+            "Jmin": "${jmin}",
+            "S1": "${s1}",
+            "S2": "${s2}",
+            "allowed_ips": "0.0.0.0/0, ::/0",
+            "client_ip": "${client_ip}",
+            "client_priv_key": "${client_priv_key}",
+            "config": "",
+            "hostName": "${server_ip}",
+            "mtu": "1280",
+            "persistent_keep_alive": "25",
+            "port": "${port}",
+            "psk_key": "${psk}",
+            "server_pub_key": "${server_pub_key}"
+        }
+    }],
+    "defaultContainer": "amnezia-awg",
+    "description": "AmneziaWG Server",
+    "dns1": "${dns}",
+    "dns2": "",
+    "hostName": "${server_ip}"
+}
+
+# Convert to JSON string
+json_str = json.dumps(config, separators=(',', ':'))
+json_bytes = json_str.encode('utf-8')
+
+# Compress with zlib (raw deflate)
+compressed = zlib.compress(json_bytes, 9)
+
+# Build binary header (12 bytes):
+# - Magic number: 0x07C00100 (big-endian)
+# - Compressed length + 4 (big-endian)
+# - Uncompressed length (big-endian)
+magic = 0x07C00100
+compressed_len = len(compressed) + 4
+uncompressed_len = len(json_bytes)
+
+header = struct.pack('>III', magic, compressed_len, uncompressed_len)
+
+# Concatenate header + compressed data
+result = header + compressed
+
+# Base64url encode
+b64 = base64.urlsafe_b64encode(result).decode('ascii').rstrip('=')
+
+# Output with vpn:// prefix
+print(f"vpn://{b64}")
+PYEOF
+}
 log_warn()    { echo -e "${YELLOW}[WARN]${NC}    $1"; }
 log_error()   { echo -e "${RED}[ERROR]${NC}   $1"; }
 log_step()    { echo -e "\n${BOLD}${CYAN}▶ Step $1: $2${NC}"; }
@@ -246,7 +344,7 @@ prepare_system() {
             # Pre-seed iptables-persistent to avoid interactive prompts
             echo iptables-persistent iptables-persistent/autosave_v4 boolean true | debconf-set-selections
             echo iptables-persistent iptables-persistent/autosave_v6 boolean true | debconf-set-selections
-            apt install -y curl wget openssl iptables iptables-persistent qrencode software-properties-common
+            apt install -y curl wget openssl iptables iptables-persistent qrencode software-properties-common python3
             ;;
         apk)
             # Enable community repo (needed for libqrencode-tools)
@@ -256,7 +354,7 @@ prepare_system() {
                 log_info "Enabled Alpine community repository."
             fi
             apk update && apk upgrade
-            apk add curl wget openssl iptables ip6tables libqrencode-tools bash
+            apk add curl wget openssl iptables ip6tables libqrencode-tools bash python3
             ;;
     esac
 
@@ -1222,7 +1320,8 @@ print_summary() {
     if [[ "${SHOW_CONFIG,,}" == "y" || "${SHOW_CONFIG,,}" == "yes" ]]; then
         echo ""
         echo -e "${CYAN}──────────────────────────────────────────────────────────${NC}"
-        echo -e "  ${BOLD}CLIENT CONFIGURATION (copy to AmneziaVPN app):${NC}"
+        echo -e "  ${BOLD}CLIENT CONFIGURATION:${NC}"
+        echo -e "  Save as ${YELLOW}.conf${NC} file and import into AmneziaVPN/AmneziaWG app"
         echo -e "${CYAN}──────────────────────────────────────────────────────────${NC}"
         echo ""
         echo -e "${GREEN}${CLIENT_CONFIG}${NC}"
@@ -1236,7 +1335,7 @@ print_summary() {
     # ── Ask: Show QR code? ──
     if [[ "$SECURE_ENV" == "y" ]]; then
         echo -e "  ${BOLD}Display QR code for client import?${NC}"
-        echo -e "  ${YELLOW}⚠ The QR code contains the client config with all credentials.${NC}"
+        echo -e "  ${YELLOW}⚠ The QR code contains all credentials for AmneziaVPN app.${NC}"
         echo ""
         read -rp "  Show QR code? [Y/n]: " SHOW_QR
         SHOW_QR="${SHOW_QR:-y}"
@@ -1251,7 +1350,25 @@ print_summary() {
         echo -e "  ${BOLD}Scan with AmneziaVPN app:${NC}"
         echo -e "${CYAN}──────────────────────────────────────────────────────────${NC}"
         echo ""
-        qrencode -t ANSIUTF8 "$CLIENT_CONFIG"
+        # Generate AmneziaVPN-compatible QR code
+        AMNEZIA_QR=$(generate_amneziavpn_qr \
+            "$SERVER_IP" \
+            "$AWG_PORT" \
+            "$SERVER_PUBLIC_KEY" \
+            "$CLIENT_PRIVATE_KEY" \
+            "${VPN_SUBNET}.2" \
+            "$PRESHARED_KEY" \
+            "$DNS_IP" \
+            "$AWG_JC" \
+            "$AWG_JMIN" \
+            "$AWG_JMAX" \
+            "$AWG_S1" \
+            "$AWG_S2" \
+            "$AWG_H1" \
+            "$AWG_H2" \
+            "$AWG_H3" \
+            "$AWG_H4")
+        qrencode -t ANSIUTF8 "$AMNEZIA_QR"
         echo ""
     else
         log_info "QR code hidden. You can generate it later with the save file."
@@ -1259,10 +1376,11 @@ print_summary() {
 
     # ── Always show: non-sensitive management info ──
     echo -e "  ${BOLD}Recommended Client Apps:${NC}"
-    echo -e "    • Android/iOS:  ${GREEN}AmneziaVPN${NC}"
-    echo -e "    • Windows:      ${GREEN}AmneziaVPN${NC}"
-    echo -e "    • macOS:        ${GREEN}AmneziaVPN${NC}"
-    echo -e "    • Linux:        ${GREEN}AmneziaVPN / awg-quick${NC}"
+    echo -e "    • Android:  ${GREEN}AmneziaVPN${NC} (scan QR code)"
+    echo -e "    • iOS:      ${GREEN}AmneziaVPN${NC} (scan QR code)"
+    echo -e "    • Windows:  ${GREEN}AmneziaVPN${NC} (scan QR or import .conf)"
+    echo -e "    • macOS:    ${GREEN}AmneziaVPN${NC} (scan QR or import .conf)"
+    echo -e "    • Linux:    ${GREEN}awg-quick up config.conf${NC}"
     echo ""
     echo -e "  ${BOLD}Manage AmneziaWG:${NC}"
     echo -e "    Status:    ${YELLOW}${SVC_STATUS}${NC}"
