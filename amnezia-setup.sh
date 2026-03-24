@@ -58,6 +58,12 @@ AWG_MODE=""      # kernel | userspace — determined during install
 VPN_SUBNET="10.10.8"
 VPN_INTERFACE="awg0"
 
+# iptables commands (may be overridden to use legacy on Alpine)
+IPTABLES="iptables"
+IPTABLES_RESTORE="iptables-restore"
+IP6TABLES="ip6tables"
+IP6TABLES_RESTORE="ip6tables-restore"
+
 # ────────────────────────────────────────────────────────────
 #  Helper functions
 # ────────────────────────────────────────────────────────────
@@ -251,20 +257,6 @@ prepare_system() {
             fi
             apk update && apk upgrade
             apk add curl wget openssl iptables ip6tables libqrencode-tools bash
-
-            # Test if iptables works (nft backend may fail in containers)
-            if ! iptables -L -n &>/dev/null; then
-                log_warn "iptables-nft not working, installing iptables-legacy..."
-                apk add iptables-legacy
-                # Create symlinks to use legacy iptables
-                ln -sf /sbin/iptables-legacy /sbin/iptables
-                ln -sf /sbin/iptables-legacy-save /sbin/iptables-save
-                ln -sf /sbin/iptables-legacy-restore /sbin/iptables-restore
-                ln -sf /sbin/ip6tables-legacy /sbin/ip6tables
-                ln -sf /sbin/ip6tables-legacy-save /sbin/ip6tables-save
-                ln -sf /sbin/ip6tables-legacy-restore /sbin/ip6tables-restore
-                log_info "Switched to iptables-legacy."
-            fi
             ;;
     esac
 
@@ -896,10 +888,10 @@ COMMIT
 RULES6_EOF
 
     # Load rules atomically
-    iptables-restore < "$RULES_V4"
+    $IPTABLES_RESTORE < "$RULES_V4"
     log_info "IPv4 rules loaded: SSH ${SSH_PORT}/tcp, AmneziaWG ${AWG_PORT}/udp"
 
-    ip6tables-restore < "$RULES_V6" 2>/dev/null || log_warn "IPv6 rules skipped (ip6tables not available)."
+    $IP6TABLES_RESTORE < "$RULES_V6" 2>/dev/null || log_warn "IPv6 rules skipped (ip6tables not available)."
 
     # Persist rules across reboots (distro-specific)
     case "$INIT_SYSTEM" in
@@ -933,10 +925,10 @@ start() {
     local PATH="/usr/sbin:/sbin:/usr/bin:/bin:\${PATH}"
     ebegin "Restoring iptables rules"
     if [ -f /etc/iptables/rules.v4 ]; then
-        iptables-restore < /etc/iptables/rules.v4
+        ${IPTABLES_RESTORE} < /etc/iptables/rules.v4
     fi
-    if [ -f /etc/iptables/rules.v6 ] && command -v ip6tables-restore >/dev/null 2>&1; then
-        ip6tables-restore < /etc/iptables/rules.v6
+    if [ -f /etc/iptables/rules.v6 ] && command -v ${IP6TABLES_RESTORE} >/dev/null 2>&1; then
+        ${IP6TABLES_RESTORE} < /etc/iptables/rules.v6
     fi
     eend \$?
 }
@@ -944,8 +936,8 @@ start() {
 stop() {
     local PATH="/usr/sbin:/sbin:/usr/bin:/bin:\${PATH}"
     ebegin "Flushing iptables rules"
-    iptables -F
-    iptables -P INPUT ACCEPT
+    ${IPTABLES} -F
+    ${IPTABLES} -P INPUT ACCEPT
     eend \$?
 }
 FWEOF
