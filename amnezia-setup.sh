@@ -763,12 +763,34 @@ PersistentKeepalive = 25"
 }
 
 # ────────────────────────────────────────────────────────────
-#  Step 9: Enable IP forwarding
+#  Step 9: Enable IP forwarding and TUN module
 # ────────────────────────────────────────────────────────────
 enable_ip_forwarding() {
-    log_step "9" "Enabling IP forwarding"
+    log_step "9" "Enabling IP forwarding and TUN module"
 
-    # Enable immediately
+    # Load TUN module (required for WireGuard/AmneziaWG)
+    if ! lsmod | grep -q "^tun"; then
+        modprobe tun 2>/dev/null || true
+    fi
+
+    # Persist TUN module across reboots
+    if [[ -f /etc/modules ]]; then
+        if ! grep -q "^tun$" /etc/modules 2>/dev/null; then
+            echo "tun" >> /etc/modules
+        fi
+    fi
+    if [[ -d /etc/modules-load.d ]]; then
+        echo "tun" > /etc/modules-load.d/tun.conf
+    fi
+
+    # Verify TUN device exists
+    if [[ ! -c /dev/net/tun ]]; then
+        log_warn "TUN device not available. VPN may not work in this environment."
+    else
+        log_info "TUN module loaded."
+    fi
+
+    # Enable IP forwarding immediately
     sysctl -w net.ipv4.ip_forward=1 > /dev/null
 
     # Persist across reboots
