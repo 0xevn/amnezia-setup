@@ -255,7 +255,7 @@ prepare_system() {
             # Test if iptables works (nft backend may fail in containers)
             if ! iptables -L -n &>/dev/null; then
                 log_warn "iptables-nft not working, installing iptables-legacy..."
-                apk add iptables-legacy ip6tables-legacy
+                apk add iptables-legacy
                 # Create symlinks to use legacy iptables
                 ln -sf /sbin/iptables-legacy /sbin/iptables
                 ln -sf /sbin/iptables-legacy-save /sbin/iptables-save
