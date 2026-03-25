@@ -150,12 +150,14 @@ During setup, you can choose between **optimized defaults** (recommended) or **r
 | `S3` | Cookie message padding | 45 *(new in 2.0)* |
 | `S4` | Transport data padding | 50 *(new in 2.0, most important!)* |
 | `H1-H4` | Magic header ranges | **Always random** |
-| `I1` | Protocol signature (QUIC mimicry) | **Optional** (user prompt) |
+| `I1` | Protocol signature (decoy packets) | **Optional** (user prompt) |
 
 **AmneziaWG 2.0 improvements:**
 - **S3/S4**: S4 adds padding to every data packet, making traffic analysis much harder
 - **H1-H4 ranges**: Each packet uses a random header value within the range (e.g., `H1 = 100000-200000`)
-- **I1**: Sends decoy packets mimicking QUIC before each handshake (experimental)
+- **I1**: Sends decoy packets mimicking other protocols (experimental):
+  - **QUIC**: Mimics HTTP/3 traffic (best with port 443)
+  - **RTP**: Mimics video streaming like Zoom/Teams (best with port 5004)
 - **Constraint**: S1 + 56 must not equal S2 (prevents pattern detection)
 - **Optimized defaults**: Tuned for aggressive DPI bypass with larger junk packets (Jmax=1000)
 

@@ -910,23 +910,34 @@ generate_obfuscation_params() {
     echo -e "${CYAN}╠══════════════════════════════════════════════════════════╣${NC}"
     echo -e "${CYAN}║${NC}                                                          ${CYAN}║${NC}"
     echo -e "${CYAN}║${NC}  I1 sends decoy packets that mimic other protocols      ${CYAN}║${NC}"
-    echo -e "${CYAN}║${NC}  (like QUIC) before each handshake to fool DPI.         ${CYAN}║${NC}"
+    echo -e "${CYAN}║${NC}  before each handshake to fool DPI.                     ${CYAN}║${NC}"
     echo -e "${CYAN}║${NC}                                                          ${CYAN}║${NC}"
-    echo -e "${CYAN}║${NC}  ${BOLD}Experimental feature${NC} — may not work with all clients.  ${CYAN}║${NC}"
-    echo -e "${CYAN}║${NC}  If connection fails, re-run setup without I1.          ${CYAN}║${NC}"
+    echo -e "${CYAN}║${NC}  ${BOLD}1)${NC} None     — Standard AmneziaWG 2.0 (default)         ${CYAN}║${NC}"
+    echo -e "${CYAN}║${NC}  ${BOLD}2)${NC} QUIC     — Mimic QUIC/HTTP3 (use with port 443)    ${CYAN}║${NC}"
+    echo -e "${CYAN}║${NC}  ${BOLD}3)${NC} RTP      — Mimic video streaming (port 5004/5005) ${CYAN}║${NC}"
+    echo -e "${CYAN}║${NC}                                                          ${CYAN}║${NC}"
+    echo -e "${CYAN}║${NC}  ${BOLD}Experimental${NC} — if connection fails, use option 1.     ${CYAN}║${NC}"
     echo -e "${CYAN}║${NC}                                                          ${CYAN}║${NC}"
     echo -e "${CYAN}╚══════════════════════════════════════════════════════════╝${NC}"
     echo ""
-    read -rp "  Enable I1 (QUIC mimicry)? [y/N]: " I1_INPUT
+    read -rp "  Select I1 protocol [1-3, default=1]: " I1_INPUT
 
-    if [[ "${I1_INPUT,,}" == "y" || "${I1_INPUT,,}" == "yes" ]]; then
-        # QUIC-mimicking I1 pattern: QUIC initial header + random data
-        AWG_I1='<b 0xc0000001><r 120>'
-        log_info "I1 enabled: ${AWG_I1}"
-    else
-        AWG_I1=""
-        log_info "I1 disabled (standard AmneziaWG 2.0 mode)."
-    fi
+    case "${I1_INPUT}" in
+        2)
+            # QUIC Initial packet header (0xc0 = long header, 0x00000001 = version 1)
+            AWG_I1='<b 0xc0000001><r 120>'
+            log_info "I1 enabled: QUIC mimicry (best with port 443)"
+            ;;
+        3)
+            # RTP header: version 2, payload type 96 (dynamic/video)
+            AWG_I1='<b 0x8060><r 10><t><r 100>'
+            log_info "I1 enabled: RTP mimicry (best with port 5004)"
+            ;;
+        *)
+            AWG_I1=""
+            log_info "I1 disabled (standard AmneziaWG 2.0 mode)."
+            ;;
+    esac
 }
 
 # ────────────────────────────────────────────────────────────
