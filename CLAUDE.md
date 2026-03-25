@@ -137,13 +137,13 @@ Uses WireGuard INI format with additional obfuscation parameters (AmneziaWG 2.0)
 PrivateKey = <server_private_key>
 Address = 10.10.8.1/24
 ListenPort = 51820
-Jc = 8
-Jmin = 50
-Jmax = 1000
-S1 = 60
-S2 = 85
-S3 = 45
-S4 = 50
+Jc = 6
+Jmin = 10
+Jmax = 50
+S1 = 19
+S2 = 45
+S3 = 41
+S4 = 8
 H1 = <min>-<max>
 H2 = <min>-<max>
 H3 = <min>-<max>
@@ -157,10 +157,10 @@ AllowedIPs = 10.10.8.2/32
 ```
 
 **Obfuscation parameter options:**
-- **Optimized defaults** (recommended): Jc=8, Jmin=50, Jmax=1000, S1=60, S2=85, S3=45, S4=50
+- **Proven defaults** (recommended): Jc=6, Jmin=10, Jmax=50, S1=19, S2=45, S3=41, S4=8
 - **Random**: User can choose to generate random Jc/Jmin/Jmax/S1-S4 values
 - **H1-H4**: Always randomly generated as ranges (e.g., `H1 = 100000-500000`)
-- **I1**: Optional QUIC-mimicking decoy packets (experimental, user prompt)
+- **I1**: Protocol mimicry decoy packets (DNS default, QUIC, RTP options)
 - Constraint: `S1 + 56 ≠ S2` (prevents pattern detection)
 
 ### Installation Strategy

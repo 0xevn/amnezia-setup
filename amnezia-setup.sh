@@ -830,9 +830,9 @@ generate_obfuscation_params() {
     echo -e "${CYAN}║${NC}                                                          ${CYAN}║${NC}"
     echo -e "${CYAN}║${NC}  AmneziaWG 2.0 uses obfuscation to evade DPI detection. ${CYAN}║${NC}"
     echo -e "${CYAN}║${NC}                                                          ${CYAN}║${NC}"
-    echo -e "${CYAN}║${NC}  ${BOLD}Optimized defaults${NC} (recommended for most DPI systems): ${CYAN}║${NC}"
-    echo -e "${CYAN}║${NC}    Jc=8, Jmin=50, Jmax=1000                              ${CYAN}║${NC}"
-    echo -e "${CYAN}║${NC}    S1=60, S2=85, S3=45, S4=50                            ${CYAN}║${NC}"
+    echo -e "${CYAN}║${NC}  ${BOLD}Proven defaults${NC} (tested and working):                  ${CYAN}║${NC}"
+    echo -e "${CYAN}║${NC}    Jc=6, Jmin=10, Jmax=50                                ${CYAN}║${NC}"
+    echo -e "${CYAN}║${NC}    S1=19, S2=45, S3=41, S4=8                             ${CYAN}║${NC}"
     echo -e "${CYAN}║${NC}                                                          ${CYAN}║${NC}"
     echo -e "${CYAN}║${NC}  ${BOLD}Random parameters${NC} generate unique values each time.    ${CYAN}║${NC}"
     echo -e "${CYAN}║${NC}                                                          ${CYAN}║${NC}"
@@ -841,7 +841,7 @@ generate_obfuscation_params() {
     echo -e "${CYAN}║${NC}                                                          ${CYAN}║${NC}"
     echo -e "${CYAN}╚══════════════════════════════════════════════════════════╝${NC}"
     echo ""
-    read -rp "  Use optimized defaults? [Y/n]: " PARAM_INPUT
+    read -rp "  Use proven defaults? [Y/n]: " PARAM_INPUT
 
     if [[ "${PARAM_INPUT,,}" == "n" || "${PARAM_INPUT,,}" == "no" ]]; then
         # Generate random parameters
@@ -862,16 +862,16 @@ generate_obfuscation_params() {
         AWG_S3=$(( (RANDOM % 33) ))           # 0-32
         AWG_S4=$(( (RANDOM % 65) ))           # 0-64
     else
-        # Optimized defaults (tuned for aggressive DPI bypass)
-        AWG_JC=8        # Junk packet count
-        AWG_JMIN=50     # Min junk size (bytes)
-        AWG_JMAX=1000   # Max junk size (bytes)
+        # Proven defaults (tested and working)
+        AWG_JC=6        # Junk packet count
+        AWG_JMIN=10     # Min junk size (bytes)
+        AWG_JMAX=50     # Max junk size (bytes)
 
         # Padding parameters (AmneziaWG 2.0)
-        AWG_S1=60       # Init packet padding (0-32 typically, but higher works)
-        AWG_S2=85       # Response packet padding
-        AWG_S3=45       # Cookie message padding - NEW in 2.0
-        AWG_S4=50       # Transport data padding - NEW in 2.0, most important!
+        AWG_S1=19       # Init packet padding
+        AWG_S2=45       # Response packet padding
+        AWG_S3=41       # Cookie message padding - NEW in 2.0
+        AWG_S4=8        # Transport data padding - NEW in 2.0
 
         log_info "Using optimized default parameters."
     fi
@@ -912,30 +912,36 @@ generate_obfuscation_params() {
     echo -e "${CYAN}║${NC}  I1 sends decoy packets that mimic other protocols      ${CYAN}║${NC}"
     echo -e "${CYAN}║${NC}  before each handshake to fool DPI.                     ${CYAN}║${NC}"
     echo -e "${CYAN}║${NC}                                                          ${CYAN}║${NC}"
-    echo -e "${CYAN}║${NC}  ${BOLD}1)${NC} None     — Standard AmneziaWG 2.0 (default)         ${CYAN}║${NC}"
-    echo -e "${CYAN}║${NC}  ${BOLD}2)${NC} QUIC     — Mimic QUIC/HTTP3 (use with port 443)    ${CYAN}║${NC}"
-    echo -e "${CYAN}║${NC}  ${BOLD}3)${NC} RTP      — Mimic video streaming (port 5004/5005) ${CYAN}║${NC}"
+    echo -e "${CYAN}║${NC}  ${BOLD}1)${NC} None     — Standard AmneziaWG 2.0                   ${CYAN}║${NC}"
+    echo -e "${CYAN}║${NC}  ${BOLD}2)${NC} DNS      — Mimic DNS response (recommended)        ${CYAN}║${NC}"
+    echo -e "${CYAN}║${NC}  ${BOLD}3)${NC} QUIC     — Mimic QUIC/HTTP3 (use with port 443)    ${CYAN}║${NC}"
+    echo -e "${CYAN}║${NC}  ${BOLD}4)${NC} RTP      — Mimic video streaming (port 5004/5005) ${CYAN}║${NC}"
     echo -e "${CYAN}║${NC}                                                          ${CYAN}║${NC}"
-    echo -e "${CYAN}║${NC}  ${BOLD}Experimental${NC} — if connection fails, use option 1.     ${CYAN}║${NC}"
+    echo -e "${CYAN}║${NC}  If connection fails, try option 1 (None).              ${CYAN}║${NC}"
     echo -e "${CYAN}║${NC}                                                          ${CYAN}║${NC}"
     echo -e "${CYAN}╚══════════════════════════════════════════════════════════╝${NC}"
     echo ""
-    read -rp "  Select I1 protocol [1-3, default=1]: " I1_INPUT
+    read -rp "  Select I1 protocol [1-4, default=2]: " I1_INPUT
 
     case "${I1_INPUT}" in
-        2)
+        1)
+            AWG_I1=""
+            log_info "I1 disabled (standard AmneziaWG 2.0 mode)."
+            ;;
+        3)
             # QUIC Initial packet header (0xc0 = long header, 0x00000001 = version 1)
             AWG_I1='<b 0xc0000001><r 120>'
             log_info "I1 enabled: QUIC mimicry (best with port 443)"
             ;;
-        3)
+        4)
             # RTP header: version 2, payload type 96 (dynamic/video)
             AWG_I1='<b 0x8060><r 10><t><r 100>'
             log_info "I1 enabled: RTP mimicry (best with port 5004)"
             ;;
         *)
-            AWG_I1=""
-            log_info "I1 disabled (standard AmneziaWG 2.0 mode)."
+            # DNS response mimicking icloud.com (default)
+            AWG_I1='<r 2><b 0x858000010001000000000669636c6f756403636f6d0000010001c00c000100010000105a00044d583737>'
+            log_info "I1 enabled: DNS mimicry (recommended)"
             ;;
     esac
 }
