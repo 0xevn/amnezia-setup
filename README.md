@@ -66,13 +66,14 @@ Then the setup proceeds:
 5. Choose a DNS provider for client config
 6. Choose logging preference (disabled by default)
 7. Generate server and client keypairs + preshared key
-8. Generate unique obfuscation parameters (H1-H4 random ranges, S1-S4/Jc fixed)
-9. Write server config to `/etc/amnezia/amneziawg/awg0.conf`
-10. Enable IP forwarding
-11. Configure iptables firewall with NAT (backs up existing rules)
-12. Enable BBR congestion control and TCP optimizations
-13. Create and start AmneziaWG service
-14. Interactive summary with credential display, QR code, and save options
+8. Choose obfuscation parameters (optimized defaults or random)
+9. Choose I1 protocol signature (optional QUIC mimicry for aggressive DPI)
+10. Write server config to `/etc/amnezia/amneziawg/awg0.conf`
+11. Enable IP forwarding
+12. Configure iptables firewall with NAT (backs up existing rules)
+13. Enable BBR congestion control and TCP optimizations
+14. Create and start AmneziaWG service
+15. Interactive summary with credential display, QR code, and save options
 
 ### Secure Mode vs Safe Mode
 
@@ -149,10 +150,12 @@ During setup, you can choose between **optimized defaults** (recommended) or **r
 | `S3` | Cookie message padding | 45 *(new in 2.0)* |
 | `S4` | Transport data padding | 50 *(new in 2.0, most important!)* |
 | `H1-H4` | Magic header ranges | **Always random** |
+| `I1` | Protocol signature (QUIC mimicry) | **Optional** (user prompt) |
 
 **AmneziaWG 2.0 improvements:**
 - **S3/S4**: S4 adds padding to every data packet, making traffic analysis much harder
 - **H1-H4 ranges**: Each packet uses a random header value within the range (e.g., `H1 = 100000-200000`)
+- **I1**: Sends decoy packets mimicking QUIC before each handshake (experimental)
 - **Constraint**: S1 + 56 must not equal S2 (prevents pattern detection)
 - **Optimized defaults**: Tuned for aggressive DPI bypass with larger junk packets (Jmax=1000)
 
@@ -199,6 +202,7 @@ The H1-H4 ranges are unique to your installation. Keep them secret — they're p
    H2 = <same as server>
    H3 = <same as server>
    H4 = <same as server>
+   I1 = <same as server, if enabled>
 
    [Peer]
    PublicKey = <server public key>
@@ -247,7 +251,9 @@ The H1-H4 ranges are unique to your installation. Keep them secret — they're p
 | Kernel module not loading | Script auto-falls back to userspace mode. Check with `lsmod \| grep amneziawg` |
 | No internet after connecting | Check IP forwarding: `cat /proc/sys/net/ipv4/ip_forward` should be `1` |
 | NAT not working | Check NAT rules: `iptables -t nat -L POSTROUTING -n` |
-| Client can't connect | Verify obfuscation params match exactly (S1-S4, H1-H4) |
+| Client can't connect | Verify obfuscation params match exactly (S1-S4, H1-H4, I1) |
+| I1 enabled but connection fails | Re-run setup without I1; not all clients support it |
+| DPI still blocking traffic | Try enabling I1, or use different port (443, 53) |
 | Locked out of SSH | Connect via VPS console, check port in config |
 | QR code not displayed | Install `qrencode`: `apt install qrencode` or `apk add libqrencode-tools` |
 

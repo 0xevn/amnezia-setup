@@ -99,6 +99,7 @@ generate_amneziavpn_qr() {
     local h2="${16}"
     local h3="${17}"
     local h4="${18}"
+    local i1="${19:-}"
 
     python3 << PYEOF
 import json
@@ -106,8 +107,13 @@ import zlib
 import struct
 import base64
 
+i1_value = """${i1}"""
+
+# Build I1 line for config (only if set)
+i1_line = f"I1 = {i1_value}" if i1_value else ""
+
 # The WireGuard .conf content (with leading newline as in working example)
-# AmneziaWG 2.0 format with S3 and S4 parameters
+# AmneziaWG 2.0 format with S3, S4, and optional I1 parameters
 wg_config = """
 [Interface]
 PrivateKey = ${client_priv_key}
@@ -124,7 +130,7 @@ H1 = ${h1}
 H2 = ${h2}
 H3 = ${h3}
 H4 = ${h4}
-
+""" + (i1_line + "\n" if i1_line else "") + """
 [Peer]
 PublicKey = ${server_pub_key}
 PresharedKey = ${psk}
@@ -157,28 +163,38 @@ last_config = {
     "config": wg_config
 }
 
+# Add I1 to last_config if set
+if i1_value:
+    last_config["I1"] = i1_value
+
 # Build the main AmneziaVPN configuration JSON
 # Order matters! container comes before awg
+awg_config = {
+    "isThirdPartyConfig": True,
+    "transport_proto": "udp",
+    "port": "${port}",
+    "Jc": "${jc}",
+    "Jmin": "${jmin}",
+    "Jmax": "${jmax}",
+    "S1": "${s1}",
+    "S2": "${s2}",
+    "S3": "${s3}",
+    "S4": "${s4}",
+    "H1": "${h1}",
+    "H2": "${h2}",
+    "H3": "${h3}",
+    "H4": "${h4}",
+    "last_config": json.dumps(last_config, separators=(',', ':'))
+}
+
+# Add I1 to awg_config if set
+if i1_value:
+    awg_config["I1"] = i1_value
+
 config = {
     "containers": [{
         "container": "amnezia-awg",
-        "awg": {
-            "isThirdPartyConfig": True,
-            "transport_proto": "udp",
-            "port": "${port}",
-            "Jc": "${jc}",
-            "Jmin": "${jmin}",
-            "Jmax": "${jmax}",
-            "S1": "${s1}",
-            "S2": "${s2}",
-            "S3": "${s3}",
-            "S4": "${s4}",
-            "H1": "${h1}",
-            "H2": "${h2}",
-            "H3": "${h3}",
-            "H4": "${h4}",
-            "last_config": json.dumps(last_config, separators=(',', ':'))
-        }
+        "awg": awg_config
     }],
     "defaultContainer": "amnezia-awg",
     "description": "AmneziaWG Server",
@@ -886,6 +902,31 @@ generate_obfuscation_params() {
     echo -e "    Jc=${AWG_JC} (junk packets), Jmin=${AWG_JMIN}, Jmax=${AWG_JMAX}"
     echo -e "    S1=${AWG_S1}, S2=${AWG_S2}, S3=${AWG_S3}, S4=${AWG_S4} (padding)"
     echo -e "    H1-H4: random non-overlapping ranges (unique to this install)"
+
+    # I1 (CPS - Custom Protocol Signature) option
+    echo ""
+    echo -e "${CYAN}╔══════════════════════════════════════════════════════════╗${NC}"
+    echo -e "${CYAN}║${NC}  ${BOLD}📡 Protocol Signature (I1)${NC}                             ${CYAN}║${NC}"
+    echo -e "${CYAN}╠══════════════════════════════════════════════════════════╣${NC}"
+    echo -e "${CYAN}║${NC}                                                          ${CYAN}║${NC}"
+    echo -e "${CYAN}║${NC}  I1 sends decoy packets that mimic other protocols      ${CYAN}║${NC}"
+    echo -e "${CYAN}║${NC}  (like QUIC) before each handshake to fool DPI.         ${CYAN}║${NC}"
+    echo -e "${CYAN}║${NC}                                                          ${CYAN}║${NC}"
+    echo -e "${CYAN}║${NC}  ${BOLD}Experimental feature${NC} — may not work with all clients.  ${CYAN}║${NC}"
+    echo -e "${CYAN}║${NC}  If connection fails, re-run setup without I1.          ${CYAN}║${NC}"
+    echo -e "${CYAN}║${NC}                                                          ${CYAN}║${NC}"
+    echo -e "${CYAN}╚══════════════════════════════════════════════════════════╝${NC}"
+    echo ""
+    read -rp "  Enable I1 (QUIC mimicry)? [y/N]: " I1_INPUT
+
+    if [[ "${I1_INPUT,,}" == "y" || "${I1_INPUT,,}" == "yes" ]]; then
+        # QUIC-mimicking I1 pattern: QUIC initial header + random data
+        AWG_I1='<b 0xc0000001><r 120>'
+        log_info "I1 enabled: ${AWG_I1}"
+    else
+        AWG_I1=""
+        log_info "I1 disabled (standard AmneziaWG 2.0 mode)."
+    fi
 }
 
 # ────────────────────────────────────────────────────────────
@@ -905,6 +946,12 @@ write_server_config() {
 
     mkdir -p "$AWG_CONFIG_DIR"
 
+    # Build I1 line for config (only if set)
+    local I1_LINE=""
+    if [[ -n "$AWG_I1" ]]; then
+        I1_LINE="I1 = ${AWG_I1}"
+    fi
+
     # Create server config
     cat > "$AWG_CONFIG" <<AWG_SERVER_EOF
 [Interface]
@@ -922,6 +969,7 @@ H1 = ${AWG_H1}
 H2 = ${AWG_H2}
 H3 = ${AWG_H3}
 H4 = ${AWG_H4}
+${I1_LINE}
 
 # NAT rules for routing client traffic
 PostUp = iptables -t nat -A POSTROUTING -s ${VPN_SUBNET}.0/24 -o ${PRIMARY_IFACE} -j MASQUERADE
@@ -954,6 +1002,7 @@ H1 = ${AWG_H1}
 H2 = ${AWG_H2}
 H3 = ${AWG_H3}
 H4 = ${AWG_H4}
+${I1_LINE}
 
 [Peer]
 # Server Public Key (this is the SERVER's key, not client's)
@@ -1474,7 +1523,8 @@ print_summary() {
             "$AWG_H1" \
             "$AWG_H2" \
             "$AWG_H3" \
-            "$AWG_H4")
+            "$AWG_H4" \
+            "$AWG_I1")
         qrencode -t ANSIUTF8 "$AMNEZIA_QR"
         echo ""
         echo -e "  ${BOLD}Or paste this URL in AmneziaVPN app:${NC}"
@@ -1568,6 +1618,7 @@ H1   = ${AWG_H1}
 H2   = ${AWG_H2}
 H3   = ${AWG_H3}
 H4   = ${AWG_H4}
+I1   = ${AWG_I1:-disabled}
 
 === CLIENT CONFIGURATION ===
 (Copy this to AmneziaVPN app or save as .conf file)
@@ -1577,7 +1628,7 @@ ${CLIENT_CONFIG}
 === AMNEZIAVPN APP URL ===
 (Paste this URL in AmneziaVPN app to import configuration)
 
-vpn://$(generate_amneziavpn_qr "$SERVER_IP" "$AWG_PORT" "$SERVER_PUBLIC_KEY" "$CLIENT_PRIVATE_KEY" "${VPN_SUBNET}.2" "$PRESHARED_KEY" "$DNS_IP" "$AWG_JC" "$AWG_JMIN" "$AWG_JMAX" "$AWG_S1" "$AWG_S2" "$AWG_S3" "$AWG_S4" "$AWG_H1" "$AWG_H2" "$AWG_H3" "$AWG_H4")
+vpn://$(generate_amneziavpn_qr "$SERVER_IP" "$AWG_PORT" "$SERVER_PUBLIC_KEY" "$CLIENT_PRIVATE_KEY" "${VPN_SUBNET}.2" "$PRESHARED_KEY" "$DNS_IP" "$AWG_JC" "$AWG_JMIN" "$AWG_JMAX" "$AWG_S1" "$AWG_S2" "$AWG_S3" "$AWG_S4" "$AWG_H1" "$AWG_H2" "$AWG_H3" "$AWG_H4" "$AWG_I1")
 
 === MANAGEMENT ===
 Config file:  ${AWG_CONFIG}

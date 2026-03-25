@@ -50,7 +50,7 @@ Key globals set during execution (defined at top of file):
 - `SSH_PORT`, `AWG_PORT`
 - `SERVER_PRIVATE_KEY`, `SERVER_PUBLIC_KEY`
 - `CLIENT_PRIVATE_KEY`, `CLIENT_PUBLIC_KEY`, `PRESHARED_KEY`
-- `AWG_JC`, `AWG_JMIN`, `AWG_JMAX`, `AWG_S1`, `AWG_S2`, `AWG_S3`, `AWG_S4`, `AWG_H1-H4`
+- `AWG_JC`, `AWG_JMIN`, `AWG_JMAX`, `AWG_S1`, `AWG_S2`, `AWG_S3`, `AWG_S4`, `AWG_H1-H4`, `AWG_I1`
 - `DNS_NAME`, `DNS_IP`
 - `SERVER_IP`, `CLIENT_CONFIG`
 
@@ -125,6 +125,7 @@ Frame colors by section:
 - **Overwrite Warning** (⚠): red
 - **Logging Preference** (📋): cyan
 - **Obfuscation Parameters** (🔧): cyan
+- **Protocol Signature I1** (📡): cyan
 - **Server Credentials**: cyan
 
 ### AmneziaWG Config Format
@@ -147,6 +148,7 @@ H1 = <min>-<max>
 H2 = <min>-<max>
 H3 = <min>-<max>
 H4 = <min>-<max>
+I1 = <b 0xc0000001><r 120>
 
 [Peer]
 PublicKey = <client_public_key>
@@ -158,6 +160,7 @@ AllowedIPs = 10.10.8.2/32
 - **Optimized defaults** (recommended): Jc=8, Jmin=50, Jmax=1000, S1=60, S2=85, S3=45, S4=50
 - **Random**: User can choose to generate random Jc/Jmin/Jmax/S1-S4 values
 - **H1-H4**: Always randomly generated as ranges (e.g., `H1 = 100000-500000`)
+- **I1**: Optional QUIC-mimicking decoy packets (experimental, user prompt)
 - Constraint: `S1 + 56 ≠ S2` (prevents pattern detection)
 
 ### Installation Strategy
