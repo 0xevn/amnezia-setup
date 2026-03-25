@@ -1525,7 +1525,9 @@ print_summary() {
             "$AWG_H3" \
             "$AWG_H4" \
             "$AWG_I1")
-        qrencode -t ANSIUTF8 "$AMNEZIA_QR"
+        # -l L = low error correction (7%) for smaller QR
+        # -m 2 = small margin (better scanning than m=1)
+        qrencode -t ANSIUTF8 -l L -m 2 "$AMNEZIA_QR"
         echo ""
         echo -e "  ${BOLD}Or paste this URL in AmneziaVPN app:${NC}"
         echo -e "  ${CYAN}vpn://${AMNEZIA_QR}${NC}"
